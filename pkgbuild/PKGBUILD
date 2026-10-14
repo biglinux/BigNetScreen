@@ -1,0 +1,79 @@
+# Maintainer: Tales A. Mendonça <talesam@gmail.com>
+# Maintainer: Bruno Gonçalves <www.biglinux.com.br>
+
+pkgname=bignetscreen
+pkgdesc="Share your screen over Chromecast, Miracast, DLNA, NDI and WebRTC"
+pkgver=$(date +%y.%m.%d)
+pkgrel=$(date +%H%M)
+arch=('x86_64' 'aarch64')
+url="https://github.com/big-comm/BigNetScreen"
+license=('GPL-3.0-or-later')
+
+depends=(
+  'gtk4>=4.22'
+  'libadwaita>=1.9'
+  'gstreamer'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gst-plugins-bad'      # mpegtsmux, openh264, va
+  'gst-plugins-ugly'     # x264enc
+  'gst-libav'            # avenc_aac
+  'gst-plugin-pipewire'  # pipewiresrc
+  'gst-plugin-dav1d'     # dav1ddec: libaom decodes 4K AV1 slower than real time
+  'pipewire'
+  'libnice'             # nicesink/nicesrc for WebRTC ICE
+  'gst-plugin-rswebrtc' # whepserversink: sharing with web browsers
+  'xdg-desktop-portal'
+  'libpulse'            # pactl: the virtual sound output
+  'avahi'               # NDI discovery
+)
+optdepends=(
+  'libndi: optional proprietary NDI runtime (ndi-sdk in the AUR)'
+  'networkmanager: Miracast discovery and connection (Wi-Fi Direct)'
+  'firewalld: automatically opens RTSP port 7236 on the P2P link'
+  'intel-media-driver: VA-API hardware encoding on Intel GPUs'
+  'libva-mesa-driver: VA-API hardware encoding on AMD GPUs'
+  'xdg-desktop-portal-gnome: screen capture on GNOME'
+  'xdg-desktop-portal-kde: screen capture on KDE'
+)
+# `gettext` is a build-time tool (msgfmt compiles the catalogues); at runtime
+# the gettext functions come from glibc.
+makedepends=('git' 'rust' 'cargo' 'gettext')
+
+# makepkg's C LTO turns the objects `ring` builds into GCC bitcode that the
+# final Rust link cannot resolve. Cargo still applies LTO to the Rust code.
+options=(!lto)
+
+install=pkgbuild.install
+
+_gitbranch="main"
+source=("${pkgname}::git+${url}.git#branch=${_gitbranch}")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "${srcdir}/${pkgname}"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked
+}
+
+build() {
+  cd "${srcdir}/${pkgname}"
+  export RUSTUP_TOOLCHAIN=stable
+  make PREFIX=/usr
+}
+
+check() {
+  cd "${srcdir}/${pkgname}"
+  export RUSTUP_TOOLCHAIN=stable CARGO_INCREMENTAL=0
+  cargo test --workspace --locked
+}
+
+package() {
+  cd "${srcdir}/${pkgname}"
+  # `make install` checks the build is current, so it needs the same toolchain.
+  export RUSTUP_TOOLCHAIN=stable
+  make DESTDIR="$pkgdir" PREFIX=/usr install
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 docs/ndi.md "$pkgdir/usr/share/doc/$pkgname/ndi.md"
+}
